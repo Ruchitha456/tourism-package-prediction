@@ -1,0 +1,122 @@
+
+name: Tourism Package Prediction Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tourism_project/**"
+      - ".github/workflows/pipeline.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  register-dataset:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tourism_project/requirements.txt
+
+      - name: Register and validate dataset
+        run: python tourism_project/model_building/data_register.py
+
+      - name: Upload registered dataset
+        uses: actions/upload-artifact@v4
+        with:
+          name: registered-data
+          path: tourism_project/data/tourism.csv
+
+  data-preparation:
+    runs-on: ubuntu-latest
+    needs: register-dataset
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tourism_project/requirements.txt
+
+      - name: Download registered dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: registered-data
+          path: tourism_project/data
+
+      - name: Prepare training and testing data
+        run: python tourism_project/model_building/data_prep.py
+
+      - name: Upload data splits
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-splits
+          path: |
+            Xtrain.csv
+            Xtest.csv
+            ytrain.csv
+            ytest.csv
+
+  model-training:
+    runs-on: ubuntu-latest
+    needs: data-preparation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tourism_project/requirements.txt
+
+      - name: Download data splits
+        uses: actions/download-artifact@v4
+        with:
+          name: data-splits
+          path: .
+
+      - name: Train and evaluate model
+        run: python tourism_project/model_building/train.py
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: tourism_project/deployment/tourism_model.joblib
+
+      - name: Commit trained model to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tourism_project/deployment/tourism_model.joblib
+          if ! git diff --cached --quiet; then
+            git commit -m "Update trained tourism prediction model [skip ci]"
+            git push
+          else
+            echo "No model changes to commit."
+          fi
