@@ -116,7 +116,8 @@ jobs:
           git add tourism_project/deployment/tourism_model.joblib
           if ! git diff --cached --quiet; then
             git commit -m "Update trained tourism prediction model [skip ci]"
-            git push
+            git pull --rebase origin main
+          git push origin HEAD:main
           else
             echo "No model changes to commit."
           fi
